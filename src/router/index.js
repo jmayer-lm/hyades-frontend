@@ -990,6 +990,25 @@ function configRoutes() {
               },
             },
             {
+                path: 'integrations/gitlab',
+                name: 'GitlabIntegration',
+                component: () =>
+                  import('@/views/administration/integrations/GitlabIntegration'),
+                meta: {
+                  title: i18n.t('message.administration'),
+                  i18n: 'message.administration',
+                  sectionPath: '/admin',
+                  sectionName: 'Admin',
+                  permissions: [
+                    'SYSTEM_CONFIGURATION',
+                    'SYSTEM_CONFIGURATION_CREATE',
+                    'SYSTEM_CONFIGURATION_READ',
+                    'SYSTEM_CONFIGURATION_UPDATE',
+                    'SYSTEM_CONFIGURATION_DELETE',
+                  ],
+                },
+            },
+            {
               path: 'integrations/kennaSecurity',
               component: KennaSecurity,
               meta: {
