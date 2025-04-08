@@ -132,7 +132,7 @@ export default {
                     <b-form-group :label="this.$t('admin.roles')">
                       <div class="list-group">
                         <span v-for="projectRole in projectRoles">
-                          <project-role-list-group-item :projectRole="projectRole" :delete-icon="true" v-on:removeClicked="removeRole(projectRole)"/>
+                          <project-role-list-group-item :projectRole="projectRole" :username="row.username" :delete-icon="true" v-on:removeClicked="removeRole(projectRole)" v-on:roleUpdated="refreshRoles"/>
                         </span>
                         <actionable-list-group-item :add-icon="true" v-on:actionClicked="$root.$emit('bv::show::modal', 'selectRoleModal')"/>
                       </div>
@@ -274,6 +274,9 @@ export default {
                             },
                             removeRole: function (projectRole) {
                                 this._removeRole(projectRole)
+                            },
+                            refreshRoles: function () {
+                                this.loadUserRoles(this.managedUser.username)
                             },
                             updatePermissionSelection: function (selections) {
                                 this._updatePermissionSelection(selections)
