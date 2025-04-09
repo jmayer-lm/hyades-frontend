@@ -1,27 +1,26 @@
-
 <template>
-    <b-card no-body :header="header">
-      <b-card-body>
-        <div id="customToolbar">
-          <b-button
-            size="md"
-            variant="outline-primary"
-            v-b-modal.createOidcUserModal
-          >
-            <span class="fa fa-plus"></span> {{ $t('admin.create_user') }}
-          </b-button>
-        </div>
-        <bootstrap-table
-          ref="table"
-          :columns="columns"
-          :data="data"
-          :options="options"
+  <b-card no-body :header="header">
+    <b-card-body>
+      <div id="customToolbar">
+        <b-button
+          size="md"
+          variant="outline-primary"
+          v-b-modal.createOidcUserModal
         >
-        </bootstrap-table>
-      </b-card-body>
-      <create-oidc-user-modal v-on:refreshTable="refreshTable" />
-    </b-card>
-  </template>
+          <span class="fa fa-plus"></span> {{ $t('admin.create_user') }}
+        </b-button>
+      </div>
+      <bootstrap-table
+        ref="table"
+        :columns="columns"
+        :data="data"
+        :options="options"
+      >
+      </bootstrap-table>
+    </b-card-body>
+    <create-oidc-user-modal v-on:refreshTable="refreshTable" />
+  </b-card>
+</template>
 
 <script>
 import xssFilters from 'xss-filters';
@@ -35,8 +34,8 @@ import ProjectRoleListGroupItem from './ProjectRoleListGroupItem.vue';
 import SelectTeamModal from './SelectTeamModal';
 import SelectPermissionModal from './SelectPermissionModal';
 import permissionsMixin from '../../../mixins/permissionsMixin';
+import userManagementMixin from '../../../mixins/userManagementMixin';
 import SelectRoleModal from './SelectRoleModal.vue';
-import rolesMixin from '../../../mixins/rolesMixin';import userManagementMixin from '../../../mixins/userManagementMixin';
 
 export default {
   props: {
@@ -124,7 +123,7 @@ export default {
                   <b-col sm="6">
                     <b-form-group :label="this.$t('admin.team_membership')">
                       <div class="list-group">
-                        <span v-for="team in teams">
+                        <span v-for="team in oidcUser.teams">
                           <actionable-list-group-item :value="team.name" :delete-icon="true" v-on:actionClicked="removeTeamMembership(team.uuid)"/>
                         </span>
                         <actionable-list-group-item :add-icon="true" v-on:actionClicked="$root.$emit('bv::show::modal', 'selectTeamModal')"/>
@@ -167,7 +166,8 @@ export default {
             },
             data() {
               return {
-                row, index,
+                row,
+                index,
                 oidcUser: row,
                 username: row.username,
                 teams: row.teams,
@@ -180,81 +180,43 @@ export default {
             },
             methods: {
               getUserObjectKey: function () {
-                return "oidcUser"
+                return 'oidcUser';
               },
-
               getUserObject: function () {
-                return this.oidcUser
+                return this.oidcUser;
               },
               deleteUser: function () {
                 const url = `${this.$api.BASE_URL}/${this.$api.URL_USER_OIDC}`;
-                const event = 'admin:oidcusers:rowDeleted'
-
-                this._deleteUser(url, event)
-
-                /* this.axios
-                  .delete(url, {
-                    data: {
-                      username: this.username,
-                    },
-                  })
-                  .then((response) => {
-                    EventBus.$emit('admin:oidcusers:rowDeleted', index);
-                    this.$toastr.s(this.$t('admin.user_deleted'));
-                  })
-                  .catch((error) => {
-                    this.$toastr.w(this.$t('condition.unsuccessful_action'));
-                  }); */
+                const event = 'admin:oidcusers:rowDeleted';
+                this._deleteUser(url, event);
               },
               updateTeamSelection: function (selections) {
                 this.$root.$emit('bv::hide::modal', 'selectTeamModal');
                 const event = 'admin:oidcusers:rowUpdate';
-
-                this._updateTeamSelection(event, selections)
-
-                /* for (let i = 0; i < selections.length; i++) {
-                  let selection = selections[i];
-                  let url = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${this.username}/membership`;
-                  this.axios
-                    .post(url, {
-                      uuid: selection.uuid,
-                    })
-                    .then((response) => {
-                      this.syncVariables(response.data);
-                      EventBus.$emit(
-                        'admin:oidcusers:rowUpdate',
-                        index,
-                        this.oidcUser,
-                      );
-                      this.$toastr.s(this.$t('message.updated'));
-                    })
-                    .catch((error) => {
-                      if (error.response.status === 304) {
-                        //this.$toastr.w(this.$t('condition.unsuccessful_action'));
-                      } else {
-                        this.$toastr.w(
-                          this.$t('condition.unsuccessful_action'),
-                        );
-                      }
-                    });
-                } */
+                this._updateTeamSelection(event, selections);
               },
               removeTeamMembership: function (teamUUID) {
-                const url = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${this.username}/membership`;
-                const event = 'admin:oidcusers:rowUpdate'
-
-                this._removeTeamMembership(url, event, teamUUID)
+                const url = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${this.oidcUser.username}/membership`;
+                const event = 'admin:oidcusers:rowUpdate';
+                this._removeTeamMembership(url, event, teamUUID);
+              },
+              updateRoleSelection: function (selection) {
+                const url = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${this.oidcUser.username}/role`;
+                this._updateRoleSelection(url, selection);
+              },
+              removeRole: function (role) {
+                this._removeRole(role);
               },
               updatePermissionSelection: function (selections) {
                 this.$root.$emit('bv::hide::modal', 'selectPermissionModal');
-
-                this._updatePermissionSelection(selections)
+                this._updatePermissionSelection(selections);
               },
               removePermission: function (permission) {
-                this._removePermission(permission)
+                this._removePermission(permission);
               },
               syncVariables: function (userObj) {
-                Object.assign(this.oidcUser, userObj)
+                Object.assign(this.oidcUser, userObj);
+                this.loadUserRoles(this.oidcUser.username);
               },
             },
           });
