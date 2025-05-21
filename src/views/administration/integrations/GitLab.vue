@@ -42,6 +42,15 @@
         v-model="gitlabUrl"
         lazy="true"
       />
+      <b-validated-input-group-form-input
+        id="gitlab-key"
+        :label="$t('admin.gitlab_key')"
+        input-group-size="mb-3"
+        rules="required"
+        type="url"
+        v-model="gitlabKey"
+        lazy="true"
+      />
       <br />
       <c-switch
         id="autoCreateProjects"
@@ -122,7 +131,6 @@ import axios from 'axios';
 import common from '../../../shared/common';
 import configPropertyMixin from '../mixins/configPropertyMixin';
 import ActionableListGroupItem from '../../components/ActionableListGroupItem';
-import BValidatedInputGroupFormInput from '../../../forms/BValidatedInputGroupFormInput';
 
 export default {
   mixins: [configPropertyMixin],
@@ -140,6 +148,7 @@ export default {
       includeArchived: false,
       gitlabAppId: '',
       gitlabUrl: '',
+      gitlabKey: '',
       sbomEnabled: true,
       autoCreateProjects: false,
       audience: '',
@@ -204,6 +213,11 @@ export default {
             propertyName: 'gitlab.url',
             propertyValue: this.gitlabUrl,
           },
+          {
+            groupName: 'integrations',
+            propertyName: 'gitlab.key',
+            propertyValue: this.gitlabKey,
+          },
         ]);
       } catch (error) {
         console.error('Error updating configuration properties:', error);
@@ -249,22 +263,25 @@ export default {
             break;
           case 'gitlab.autocreate.projects':
             this.autoCreateProjects = common.toBoolean(item.propertyValue);
-            break; 
+            break;
           case 'gitlab.audience':
             this.audience = item.propertyValue;
             break;
           case 'gitlab.topics':
             this.topics = JSON.parse(item.propertyValue);
-            break; 
+            break;
           case 'gitlab.app.id':
             this.gitlabAppId = configItemsAppId[0].propertyValue;
             break;
           case 'gitlab.url':
             this.gitlabUrl = configItemsAppId[0].propertyValue;
             break;
+          case 'gitlab.key':
+            this.gitlabKey = configItemsAppId[0].propertyValue;
+            break;
         }
       }
-      
+
       this.isInitialized = true;
     });
   },
