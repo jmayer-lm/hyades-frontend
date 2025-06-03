@@ -1,197 +1,211 @@
 import EventBus from '../shared/eventbus';
 
+/**
+ * A Vue.js mixin for managing user-related operations such as roles, permissions, and team memberships.
+ * Provides utility methods for interacting with APIs and handling user management tasks.
+ *
+ * @mixin
+ */
 export default {
   created: function () {
-    if (this.index == null || this.row == null) {
-      throw new Error(
-        "userManagementMixin requires 'index' and 'row' variables, which are typically provided by a detailFormatter function.",
-      );
-    }
+    this._userManagementMixin_init();
   },
+  data: () => ({ _userManagementMixin_ready: false }),
   methods: {
-    getUserObjectKey: function () {
-      throw new Error(
-        'getUserObjectKey function must be implemented to use "userManagementMixin".',
-      );
+    // -- public methods --
+
+    // Loads the user roles for a specific user. return data if targetField is null
+    loadUserProjects: async function (username) {
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_ROLE}/${username}/role`;
+      try {
+        const response = await this.axios.get(endpoint);
+        return response.data;
+      } catch (error) {
+        console.error(error);
+      }
     },
 
-    getUserObject: function () {
-      throw new Error(
-        'getUserObject function must be implemented to use "userManagementMixin".',
-      );
-    },
-
-    loadUserRoles: function (username) {
-      let url = `${this.$api.BASE_URL}/${this.$api.URL_ROLE}/${username}/roles`;
-      this.axios
-        .get(url)
-        .then((response) => {
-          this.projectRoles = response.data;
-        })
-        .catch((error) => {
-          console.error('Error loading user roles:', error);
-          this.projectRoles = [];
-        });
+    // Loads the user roles for a specific user. return data if targetField is null
+    loadAvailableProjectRoles: async function () {
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_ROLE}`;
+      try {
+        const response = await this.axios.get(endpoint);
+        return response.data;
+      } catch (error) {
+        console.error(error);
+      }
     },
 
     // TODO: internal server error 500
-    _deleteUser: function (endpoint, updateEvent) {
-      const userObj = this.getUserObject();
-
-      this.axios
-        .delete(endpoint, {
+    _deleteUser: async function (endpoint) {
+      this._userManagementMixin_checkReady();
+      try {
+        await this.axios.delete(endpoint, {
           data: {
-            username: userObj.username,
+            // e.g { username: 'testuser' }
+            [this._identifierField]: this.row[this._identifierField],
           },
-        })
-        .then(() => {
-          EventBus.$emit(updateEvent, this.index);
-          this.$toastr.s(this.$t('admin.user_deleted'));
-        })
-        .catch((error) => {
-          console.error(error);
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
         });
+        this._successfulResponse_delete();
+      } catch (error) {
+        this.handleError(error);
+      }
     },
 
-    // TODO: implement batch selections when apiserver support is implemented
-    _updateTeamSelection: function (updateEvent, selections) {
-      const userObj = this.getUserObject();
-      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${userObj.username}/membership`;
-
-      // remove selected permissions that are already applied
-      const filterCallback = (selection) => {
-        return !userObj.teams.some((team) => team.uuid === selection.uuid);
+    _updateTeamSelection: async function (selections) {
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_USER_MEMBERSHIP}`;
+      this._userManagementMixin_checkReady();
+      const requestBody = {
+        [this._identifierField]: this.row[this._identifierField],
+        teams: selections.map((team) => team.uuid),
       };
-      const mapCallback = async (selection) =>
-        await this.axios.post(endpoint, { uuid: selection.uuid });
-      const request_promises = selections
-        .filter(filterCallback)
-        .map(mapCallback);
-
-      // asynchronously process requests
-      Promise.all(request_promises)
-        .then(() => {
-          this.syncVariables({ teams: selections });
-
-          //eg ("admin:ldapusers:rowUpdate", index, this.ldapUser)
-          EventBus.$emit(updateEvent, this.index, userObj);
-          this.$toastr.s(this.$t('message.updated'));
-        })
-        .catch((error) => {
-          console.error(error);
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
-        });
+      try {
+        const response = await this.axios.put(endpoint, requestBody);
+        this._successfulResponse_update(response);
+      } catch (error) {
+        if (error.response?.status === 304) return;
+        this.handleError(error);
+      }
     },
 
-    _removeTeamMembership: function (endpoint, updateEvent, teamUUID) {
-      const userObj = this.getUserObject();
-      this.axios
-        .delete(endpoint, { data: { uuid: teamUUID } })
-        .then((response) => {
-          this.syncVariables(response.data);
-          EventBus.$emit(updateEvent, this.index, userObj);
-          this.$toastr.s(this.$t('message.updated'));
-        })
-        .catch((error) => {
-          console.error(error);
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
+    _removeTeamMembership: async function (teamUUID) {
+      const username = this.row[this._identifierField];
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${username}/membership`;
+
+      this._userManagementMixin_checkReady();
+      try {
+        const response = await this.axios.delete(endpoint, {
+          data: { uuid: teamUUID },
         });
+        this._successfulResponse_update(response);
+      } catch (error) {
+        this.handleError(error);
+      }
     },
 
-    // updateEvent not needed here since we don't need to update the row at the moment, this may change later
-    _updateRoleSelection: function (endpoint, selection) {
-      this.axios
-        .post(endpoint, {
-          roleUUID: selection.role,
-          projectUUID: selection.project,
-        })
-        .then((response) => {
-          this.$toastr.s(this.$t('admin.role_assigned'));
-          this.syncVariables(response.data);
-        })
-        .catch((error) => {
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
-          console.error(error);
-        });
-    },
-
-    // endpoint doesn't change across ldap, managed or oidc
-    _removeRole: function (projectRole) {
-      const username = this[this.getUserObjectKey()].username;
-      const url = `${this.$api.BASE_URL}/${this.$api.URL_USER}/${username}/role`;
-
-      this.axios
-        .delete(url, {
-          data: {
-            roleUUID: projectRole.role.uuid,
-            projectUUID: projectRole.project.uuid,
-          },
-        })
-        .then((response) => {
-          this.syncVariables(response.data);
-          this.$toastr.s(this.$t('message.updated'));
-        })
-        .catch(() => {
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
-        });
-    },
-    // TODO: update once batch operations are implemented, Account for 304
+    // Updates the permissions for a user. (essentially adds/removes the user from the permission)
     _updatePermissionSelection: async function (selections) {
-      const userObj = this.getUserObject();
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_USER_PERMISSION}`;
+      this._userManagementMixin_checkReady();
+      const requestBody = {
+        [this._identifierField]: this.row[this._identifierField],
+        permissions: selections.map((selection) => selection.name),
+      };
 
-      const currentPermissions = userObj.permissions;
-      const newPermissions = selections; // could be more or less selected
-
-      // relative complement
-      // add = (newPermissions - currentPermissions); remove = (currentPermissions - newPermissions),
-      const permissionsToAdd = newPermissions.filter(
-        (newPerm) =>
-          !currentPermissions.some(
-            (currentPerm) => currentPerm.name === newPerm.name,
-          ),
-      );
-      const permissionsToRemove = currentPermissions.filter(
-        (currentPerm) =>
-          !newPermissions.some((newPerm) => newPerm.name === currentPerm.name),
-      );
-
-      const mappedAdd = permissionsToAdd.map(async (permission) => {
-        const url = `${this.$api.BASE_URL}/${this.$api.URL_PERMISSION}/${permission.name}/user/${userObj.username}`;
-        return await this.axios.post(url);
-      });
-      const mappedRemove = permissionsToRemove.map(async (permission) => {
-        const url = `${this.$api.BASE_URL}/${this.$api.URL_PERMISSION}/${permission.name}/user/${userObj.username}`;
-        // return await this._removePermission(permission);
-        return await this.axios.delete(url);
-      });
-
-      // response data isn't reliable as promises can resolve too fast and at different times
-      return Promise.all([mappedAdd, mappedRemove])
-        .then(() => {
-          // sync variables from selections to avoid missing permissions
-          this.syncVariables({ permissions: newPermissions });
-          this.$toastr.s(this.$t('message.updated'));
-        })
-        .catch((error) => {
-          console.error(error);
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
-        });
+      try {
+        const response = await this.axios.put(endpoint, requestBody);
+        this._successfulResponse_update(response);
+      } catch (error) {
+        this.handleError(error);
+      }
     },
 
+    // Removes a user from a permission. (essentially removes the user from the permission)
     _removePermission: async function (permission) {
-      const userObj = this.getUserObject();
-      const url = `${this.$api.BASE_URL}/${this.$api.URL_PERMISSION}/${permission.name}/user/${userObj.username}`;
-      return this.axios
-        .delete(url)
-        .then((response) => {
-          this.syncVariables(response.data);
-          this.$toastr.s(this.$t('message.updated'));
-        })
-        .catch((error) => {
-          console.error(error);
-          this.$toastr.w(this.$t('condition.unsuccessful_action'));
-        });
+      this._userManagementMixin_checkReady();
+      const username = this.row[this._identifierField];
+      const url = `${this.$api.BASE_URL}/${this.$api.URL_PERMISSION}/${permission.name}/user/${username}`;
+      try {
+        const response = await this.axios.delete(url);
+        this._successfulResponse_update(response);
+      } catch (error) {
+        this.handleError(error);
+      }
+    },
+
+    _handleProjectRole: async function (action, projectRole, callbacks = null) {
+      this._userManagementMixin_checkReady();
+      const { role, project } = projectRole;
+      const endpoint = `${this.$api.BASE_URL}/${this.$api.URL_USER_ROLE}`;
+      const requestBody = {
+        [this._identifierField]: this.row[this._identifierField],
+        role,
+        project,
+      };
+
+      try {
+        let response;
+        let successMessage;
+        switch (action) {
+          case 'add':
+          case 'update':
+            response = await this.axios.put(endpoint, requestBody);
+            successMessage =
+              action === 'add'
+                ? this.$t('admin.role_assigned')
+                : this.$t('admin.role_updated');
+            break;
+          case 'remove':
+            response = await this.axios.delete(endpoint, { data: requestBody });
+            successMessage = this.$t('admin.role_deleted');
+            break;
+          default:
+            throw new Error(`Invalid action: ${action}`);
+        }
+
+        this.$toastr.s(successMessage);
+        callbacks?.success?.(response);
+      } catch (error) {
+        this.handleError(error);
+        callbacks?.error?.(error);
+      }
+    },
+
+    // -- utility methods --
+
+    handleError: function (error, toastMessageKey) {
+      const messageKey = toastMessageKey ?? 'condition.unsuccessful_action';
+      console.error(error);
+      this.$toastr.w(this.$t(messageKey));
+    },
+    _successfulResponse_update: function (response) {
+      if (this.rowEvents && this.rowEvents.update)
+        EventBus.$emit(this.rowEvents.update, this.index, response.data);
+      this.$toastr.s(this.$t('message.updated'));
+    },
+
+    _successfulResponse_delete: function () {
+      if (this.rowEvents && this.rowEvents.delete)
+        EventBus.$emit(this.rowEvents.delete, this.index);
+      this.$toastr.s(this.$t('admin.user_deleted'));
+    },
+
+    _userManagementMixin_checkReady: function () {
+      if (!this._userManagementMixin_ready) {
+        throw new Error('userManagementMixin is not ready. Init failed');
+      }
+    },
+
+    _userManagementMixin_init: function () {
+      if (!this._identifierField) {
+        this._identifierField = 'username';
+      }
+
+      if (this.umm_bypassInit === true) {
+        console.warn('userManagementMixin: bypassing init check');
+        this._userManagementMixin_ready = true;
+        return;
+      }
+
+      if (this.index == null || this.row == null) {
+        throw new Error(
+          "userManagementMixin requires 'index' and 'row' variables, which are typically provided by a detailFormatter function.",
+        );
+      }
+
+      const rowEventsReady = !!(
+        this.rowEvents &&
+        this.rowEvents.update &&
+        this.rowEvents.delete
+      );
+
+      if (!rowEventsReady) {
+        console.warn(
+          "userManagementMixin: 'rowEvents' object is either undefined or missing properties 'update' or 'delete'. Changes may not reflect properly until refresh.",
+        );
+      }
+
+      this._userManagementMixin_ready = true;
     },
   },
 };
